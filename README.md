@@ -1,7 +1,9 @@
 # DocumentValidator
 Simple Electronic Document Validation tool that uses Phax' web service with a GUI.
-The WebService is described on https://peppol.helger.com/public/menuitem-validation-ws2
-The original validation engine is on https://github.com/phax/phive, My code is just a simple GUI to interact with Helger's validation tool. It does the same job as [ecosio](https://ecosio.com/en/peppol-and-xml-document-validator/), but without needing a browser.
+
+The WebService is described on https://peppol.helger.com/public/menuitem-validation-ws2  
+The original validation engine is on https://github.com/phax/phive  
+My code is just a simple GUI to interact with Helger's validation tool. It does the same job as [ecosio](https://ecosio.com/en/peppol-and-xml-document-validator/), but without needing a browser.
 
 ## Running from the source code
 The program is written in Python and should work on any platform as long as all dependencies are installed. The following libraries are needed:
@@ -11,7 +13,7 @@ The program is written in Python and should work on any platform as long as all 
 * PySimpleGUI
 
 ## Running on Windows
-A pre-compiled version in a single *.exe file is available for Windows. I have compiled and tested it only on Windows 11 using PyInstaller.
+A pre-compiled version in a single *.exe file is available for Windows. I have compiled and tested it only on Windows 11 using PyInstaller.  
 The binary is not digitally signed, so it may be flagged by your anti-virus as potentially malitious.
 
 ## Other considerations
