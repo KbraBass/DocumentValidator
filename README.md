@@ -22,3 +22,8 @@ The back-end is not my work, so all credit goes to @phax and the PEPPOL team.
 
 ## Known Issues
 There is no error message for when the WebService is down. So the document type list simply doesn't get populated.
+
+## Updates and Releases
+2024-02-26 Added support to select and validate multiple files at once.
+2024-02-26 Added progress bar and ETA for when validating multiple files.
+2024-02-26 Added support to save the validation results to a folder instead of displaying a window. The files will be saved as "[sourceFilename]_results.txt".

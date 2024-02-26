@@ -1,3 +1,5 @@
+import os
+import time
 import PySimpleGUI as sg
 import requests
 from zeep import Client
@@ -34,11 +36,13 @@ loading_window.close()
 # Create the GUI layout
 layout = [
     [sg.Text("Enter the file path:")],
-    [sg.Input(key="-FILE_PATH-"), sg.FileBrowse()],
+    [sg.Input(key="-FILE_PATHS-"), sg.FilesBrowse()],
     [sg.Text("Please select a DocType:")],
     [sg.Input(key="-FILTER-", enable_events=True)],
     [sg.Checkbox("Exclude deprecated", key="-EXCLUDE_DEPRECATED-", enable_events=True)],
     [sg.Listbox(doc_type_names, size=(150, 30), key="-DOCTYPES-", enable_events=True)],
+    [sg.Text("Please select a folder to save results (a window will ope for each result if left blank):")],
+    [sg.Input(key="-FOLDER-"), sg.FolderBrowse()],
     [sg.Button("Validate")]
 ]
 
@@ -50,11 +54,6 @@ while True:
 
     if event == sg.WINDOW_CLOSED:
         break
-
-    if event == "Select File":
-        file_path = values["-FILE_PATH-"]
-        # Do something with the file path
-        print(f"Selected file: {file_path}")
 
     if event == "-FILTER-":
         filter_text = values["-FILTER-"]
@@ -84,37 +83,72 @@ while True:
         doc_type_index = doc_type_names.index(values["-DOCTYPES-"][0])
         doc_type_value = doc_type_values[doc_type_index]
 
-        file_path = values["-FILE_PATH-"]
+        # Split the file_paths string into a list of filenames
+        file_paths = values["-FILE_PATHS-"].split(";")
 
-        with open(file_path, "r") as file:
-            xml_payload = file.read()
+        # Get the folder to save results
+        folder_path = values["-FOLDER-"]
 
-        wsdl_url = "https://peppol.helger.com/wsdvs?wsdl"
-
-        client = Client(wsdl_url)
-        response = client.service.validate(XML=xml_payload, VESID=doc_type_value)
-
-        # Create the result window
-        result_layout = [
-            [sg.Multiline(response, size=(80, 20), key="-TEXT-", enable_events=True)],
-            [sg.Button("Copy")]
+        # Create a new window with a progress bar
+        progress_layout = [
+            [sg.Text(f"Processing file 0 out of {len(file_paths)}", key="-PROGRESS_TEXT-")],  # Add a key to the Text element
+            [sg.ProgressBar(len(file_paths), orientation="h", size=(20, 20), key="-PROGRESS-")],
+            [sg.Text("", key="-ETA-", size=(30, 1))],  # ETA text
         ]
+        progress_window = sg.Window("Processing", progress_layout, finalize=True)
 
-        result_window = sg.Window("Validation Result", result_layout)
+        start_time = time.time()  # Record the start time
 
-        while True:
-            result_event, result_values = result_window.read()
+        # Send a SOAP request for each file
+        for i, file_path in enumerate(file_paths):
+            with open(file_path, "r") as file:
+                xml_payload = file.read()
 
-            if result_event == sg.WINDOW_CLOSED:
-                break
+            wsdl_url = "https://peppol.helger.com/wsdvs?wsdl"
 
-            if result_event == "-TEXT-":
-                result_window["-TEXT-"].Widget.config(wrap="none")
+            client = Client(wsdl_url)
+            response = client.service.validate(XML=xml_payload, VESID=doc_type_value)
 
-            if result_event == "Copy":
-                result_window["-TEXT-"].Widget.clipboard_clear()
-                result_window["-TEXT-"].Widget.clipboard_append(result_values["-TEXT-"])
+            # Check if a folder path is provided
+            if folder_path:
+                # Save the result to a file
+                result_file_path = os.path.join(folder_path, os.path.basename(file_path) + "_results.txt")
+                with open(result_file_path, "w") as result_file:
+                    result_file.write(str(response))  # Convert the response to a string
+            else:
+                # Create the result window
+                result_layout = [
+                    [sg.Multiline(response, size=(80, 20), key="-TEXT-", enable_events=True)],
+                    [sg.Button("Copy")]
+                ]
 
-        result_window.close()
+                result_window = sg.Window("Validation Result for " + os.path.basename(file_path), result_layout)
+
+                while True:
+                    result_event, result_values = result_window.read()
+
+                    if result_event == sg.WINDOW_CLOSED:
+                        break
+
+                    if result_event == "-TEXT-":
+                        result_window["-TEXT-"].Widget.config(wrap="none")
+
+                    if result_event == "Copy":
+                        result_window["-TEXT-"].Widget.clipboard_clear()
+                        result_window["-TEXT-"].Widget.clipboard_append(result_values["-TEXT-"])
+
+                result_window.close()
+
+            # Update the progress text and bar
+            progress_window["-PROGRESS_TEXT-"].update(f"Processing file {i + 1} out of {len(file_paths)}")
+            progress_window["-PROGRESS-"].update(i + 1)
+
+            # Calculate and update the ETA
+            elapsed_time = time.time() - start_time
+            eta = elapsed_time / (i + 1) * (len(file_paths) - i - 1)
+            progress_window["-ETA-"].update(f"ETA: {eta:.2f} seconds")
+
+        # Close the progress window
+        progress_window.close()
 
 window.close()
