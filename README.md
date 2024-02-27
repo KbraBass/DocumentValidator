@@ -5,6 +5,9 @@ The WebService is described on https://peppol.helger.com/public/menuitem-validat
 The original validation engine is on https://github.com/phax/phive  
 My code is just a simple GUI to interact with Helger's validation tool. It does the same job as [ecosio](https://ecosio.com/en/peppol-and-xml-document-validator/), but without needing a browser.
 
+If you'd like to implement a similar solution in a production environment, if you're getting lots of error 429 responses or if you use this in a daily basis, you should probably contact Philip Helger for support as he owns the back-end. his disclaimer reads: 
+> This service is currently provided free of charge. If you want to setup your own service for production usage don't hesitate to contact me at philip[at]helger[dot]com for support.
+
 ## Running from the source code
 The program is written in Python and should work on any platform as long as all dependencies are installed. The following libraries are needed:
 * bs4
@@ -17,7 +20,7 @@ A pre-compiled version in a single *.exe file is available for Windows. I have c
 The binary is not digitally signed, so it may be flagged by your anti-virus as potentially malitious.
 
 ## Other considerations
-If you like and use this program, please leave a comment tellimg me what you like and what improvement you'd like to see.  
+If you like and use this program, please leave a comment telling me what you like and what improvement you'd like to see.  
 The back-end is not my work, so all credit goes to @phax and the PEPPOL team.
 
 ## Known Issues
