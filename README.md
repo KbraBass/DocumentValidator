@@ -21,7 +21,7 @@ The binary is not digitally signed, so it may be flagged by your anti-virus as p
 
 ## Other considerations
 If you like and use this program, please leave a comment telling me what you like and what improvement you'd like to see.  
-The back-end is not my work, so all credit goes to @phax and the PEPPOL team.
+The back-end is not my work, so all credit goes to @phax.
 
 ## Known Issues
 There is no error message for when the WebService is down. So the document type list simply doesn't get populated.
