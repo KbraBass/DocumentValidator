@@ -253,11 +253,11 @@ import { createValidator } from "./phive-engine.js";
   // The engine (worker or fallback) returns RAW SVRL; parse it into failures
   // here on the main thread (DOMParser is unavailable in workers).
   function parseSvrl(sch) {
-    if (sch.skipped) return { skipped: sch.skipped };
+    if (sch.skipped) return { skipped: sch.skipped, error: !!sch.error };
     const failures = [];
     for (const { ruleset, svrl } of sch.svrls) {
       const doc = new DOMParser().parseFromString(svrl, "application/xml");
-      if (doc.querySelector("parsererror")) return { skipped: "SVRL parse error" };
+      if (doc.querySelector("parsererror")) return { skipped: "SVRL parse error", error: true };
       for (const node of doc.getElementsByTagNameNS(SVRL_NS, "failed-assert")) {
         failures.push({
           id: node.getAttribute("id"),
@@ -306,6 +306,18 @@ import { createValidator } from "./phive-engine.js";
       console.warn("[validator] XSD worker pool unavailable, doing XSD in-thread:", e);
       _pool = null;
     }
+  }
+
+  // Schematron runs on the single main-thread engine, so transforms must be
+  // SERIALISED — Saxon-JS keeps global + parsed-SEF state during a transform,
+  // and interleaving concurrent lanes' transforms corrupts it (manifesting as
+  // "Cannot compare xs:QName with xs:QName"). A promise chain enforces
+  // one-at-a-time without losing the (parallel) XSD work in the workers.
+  let _schChain = Promise.resolve();
+  function schematronSerial(xmlText, fmt) {
+    const p = _schChain.then(() => _mainEngine.validateSchematronOnly(xmlText, fmt));
+    _schChain = p.then(() => {}, () => {});   // keep the chain alive past errors
+    return p;
   }
 
   // XSD for one file: on a pool worker if available, else the main engine.
@@ -378,22 +390,29 @@ import { createValidator } from "./phive-engine.js";
           else {
             rec.formatKey = fmt.key; rec.formatLabel = fmt.label;
             rec.group = fmt.group || "?"; rec.deprecated = !!fmt.deprecated;
-            // XSD in parallel on a worker; Schematron on the main engine.
+            // XSD in parallel on a worker; Schematron serialised on the main engine.
             const a = performance.now();
             const xsd = await xsdOn(w, text, fmt);
             const b = performance.now();
-            const sch = parseSvrl(await _mainEngine.validateSchematronOnly(text, fmt));
+            const sch = parseSvrl(await schematronSerial(text, fmt));
             const c = performance.now();
             rec.xsdMs = b - a; rec.schMs = c - b;
             renderXsd(row, xsd);
             renderSch(row, sch);
-            rec.xsd = xsd.skipped ? "skip" : (xsd.passed ? "pass" : "fail");
-            rec.sch = sch.skipped ? "skip" : (sch.passed ? "pass" : "fail");
+            const layer = (r) => r.error ? "error" : r.skipped ? "skip" : (r.passed ? "pass" : "fail");
+            rec.xsd = layer(xsd); rec.sch = layer(sch);
             rec.failures = (sch.failures || []).map(f => ({ id: f.id || "—", text: f.text, ruleset: f.ruleset }));
-            const xsdOk = xsd.skipped || xsd.passed;
-            const schOk = sch.skipped || sch.passed;
-            rec.outcome = xsdOk && schOk ? "pass" : "fail";
-            markRow(row, xsdOk && schOk ? "ok" : "fail", xsdOk && schOk ? "Pass" : "Fail");
+            if (xsd.error || sch.error) {
+              // A layer that should have run but errored — NOT a pass.
+              rec.outcome = "error";
+              markRow(row, "error", "Error");
+            } else {
+              // A clean skip (layer not applicable) doesn't fail the file.
+              const xsdOk = xsd.passed || xsd.skipped;
+              const schOk = sch.passed || sch.skipped;
+              rec.outcome = xsdOk && schOk ? "pass" : "fail";
+              markRow(row, rec.outcome === "pass" ? "ok" : "fail", rec.outcome === "pass" ? "Pass" : "Fail");
+            }
           }
         } catch (err) {
           console.error(err);
@@ -733,7 +752,7 @@ import { createValidator } from "./phive-engine.js";
       }));
 
     function cell(s) {
-      const map = { pass: "ok", fail: "fail", skip: "skip", na: "skip" };
+      const map = { pass: "ok", fail: "fail", skip: "skip", na: "skip", error: "fail" };
       const txt = s === "na" ? "—" : s;
       return `<span class="phive-pill phive-pill--${map[s] || "skip"}">${txt}</span>`;
     }

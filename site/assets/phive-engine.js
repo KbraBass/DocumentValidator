@@ -130,7 +130,7 @@ export function createValidator(paths) {
       const sefAbs = assetUrl(sefRel);
       let sef;
       try { sef = await sefObject(sefAbs); }
-      catch (e) { return { skipped: `SEF fetch failed: ${sefRel}` }; }
+      catch (e) { return { skipped: `SEF fetch failed: ${sefRel}`, error: true }; }
       let svrl;
       try {
         const result = await saxon.transform({
@@ -143,7 +143,9 @@ export function createValidator(paths) {
           ? result.principalResult
           : (result.principalResult?.serialize?.() ?? String(result.principalResult));
       } catch (err) {
-        return { skipped: "Saxon-JS error: " + (err.message || err) };
+        // The layer was supposed to run but couldn't — an ERROR, not a clean
+        // skip. The caller must NOT treat this as a pass.
+        return { skipped: "Saxon-JS error: " + (err.message || err), error: true };
       }
       svrls.push({ ruleset: sefRel.split("/").pop(), svrl });
     }
