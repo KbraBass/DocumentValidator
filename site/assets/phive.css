@@ -1,0 +1,229 @@
+/* phive-web — standalone styling.
+ *
+ * Self-contained: no mkdocs / Material dependency. Colour tokens and the
+ * validator widget styles are adapted from the Basware SuperCore theme so
+ * the look is consistent, renamed to the `phive-*` namespace.
+ */
+
+:root {
+  --fg:          #0b1b2b;
+  --fg-light:    #3b4a5a;
+  --fg-lighter:  #6b7888;
+  --bg:          #ffffff;
+  --bg-soft:     #f5f7fa;
+  --primary:     #0a4ea6;
+  --accent:      #0d6efd;
+  --code-bg:     #eef2f7;
+  --border:      #d8dee6;
+  --ok:          #1f9d55;
+  --fail:        #d93030;
+  --warn:        #b97a16;
+  --font:        "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono:        "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e6edf5; --fg-light: #a8b4c2; --fg-lighter: #7e8b9a;
+    --bg: #0d1117; --bg-soft: #161b22; --primary: #4d9aff; --accent: #4d9aff;
+    --code-bg: #1c2330; --border: #2a323d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--fg);
+  background: var(--bg);
+  line-height: 1.55;
+}
+
+a { color: var(--primary); }
+code { font-family: var(--mono); background: var(--code-bg); padding: .1em .35em; border-radius: 4px; font-size: .85em; }
+
+.phive-header {
+  background: linear-gradient(135deg, var(--primary), #082d4a);
+  color: #fff;
+  padding: 1.6rem 1.25rem;
+}
+.phive-header__inner { max-width: 980px; margin: 0 auto; }
+.phive-header h1 { margin: 0 0 .25rem; font-size: 1.5rem; }
+.phive-header p { margin: 0; opacity: .9; font-size: .95rem; }
+
+main { max-width: 980px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+
+.phive-callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ok);
+  background: var(--bg-soft);
+  border-radius: 6px;
+  padding: .75rem 1rem;
+  margin: 1rem 0 1.5rem;
+  font-size: .9rem;
+}
+.phive-callout strong { color: var(--ok); }
+.phive-callout--warn { border-left-color: var(--warn); background: rgba(214,145,26,.08); }
+.phive-callout--warn strong { color: var(--warn); }
+
+h2 { font-size: 1.15rem; margin-top: 2rem; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; margin: .75rem 0; }
+th, td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--bg-soft); }
+
+/* ── Validator widget ─────────────────────────────────────────────── */
+.phive { margin: 1rem 0; }
+
+.phive__controls {
+  display: flex; align-items: center; gap: .6rem; margin-bottom: .75rem; flex-wrap: wrap;
+}
+.phive__format-label { font-size: .85rem; color: var(--fg-light); font-weight: 600; }
+#phive-format {
+  font: inherit; font-size: .9rem; padding: .4rem .6rem;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg);
+  min-width: 22rem; max-width: 100%;
+}
+.phive__dep-toggle { font-size: .82rem; color: var(--fg-light); display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+
+.phive__drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .25rem; text-align: center;
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 1.75rem 1rem; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.phive__drop:hover { border-color: var(--accent); }
+.phive__drop.is-drag { border-color: var(--accent); background: var(--bg-soft); }
+.phive__drop strong { font-size: .95rem; }
+.phive__hint { font-size: .8rem; color: var(--fg-light); }
+
+.phive__bar { display: flex; align-items: center; gap: .6rem; margin: .75rem 0; }
+.phive__bar #phive-status { flex: 1; font-size: .85rem; color: var(--fg-light); }
+.phive__bar button {
+  font: inherit; font-size: .85rem; padding: .35rem .9rem; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px;
+}
+.phive__bar button:disabled { background: var(--code-bg); border-color: var(--border); color: var(--fg-lighter); cursor: default; }
+.phive__bar button#phive-clear { background: transparent; color: var(--fg-light); border-color: var(--border); }
+
+.phive__list { list-style: none; padding: 0; margin: 1rem 0 0; }
+.phive-row { border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem; margin-bottom: .6rem; background: var(--bg); }
+.phive-row header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+.phive-row__name { font-family: var(--mono); font-size: .85rem; word-break: break-all; }
+
+.phive-badge { font-size: .75rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; white-space: nowrap; }
+.phive-badge--running { background: var(--code-bg); color: var(--fg-light); }
+.phive-badge--ok    { background: rgba(31,157,85,.16);  color: var(--ok); }
+.phive-badge--fail  { background: rgba(217,48,48,.18);  color: var(--fail); }
+.phive-badge--skip  { background: rgba(214,145,26,.18); color: var(--warn); }
+.phive-badge--error { background: rgba(217,48,48,.18);  color: var(--fail); }
+
+.phive-row__banner:empty { display: none; }
+.phive-banner {
+  margin: .5rem 0 0; padding: .4rem .65rem; border-radius: 6px;
+  font-size: .8rem; border: 1px solid transparent;
+}
+.phive-banner code { font-size: .92em; }
+.phive-banner--exact {
+  background: rgba(31,157,85,.12); border-color: rgba(31,157,85,.4); color: var(--ok);
+}
+.phive-banner--best {
+  background: rgba(214,145,26,.13); border-color: rgba(214,145,26,.45); color: var(--warn);
+}
+
+.phive-row__meta { display: grid; grid-template-columns: auto 1fr; gap: .1rem .75rem; margin: .5rem 0 0; font-size: .82rem; }
+.phive-row__meta dt { color: var(--fg-light); }
+.phive-row__meta dd { margin: 0; word-break: break-all; }
+
+.phive-row__xsd, .phive-row__sch { margin-top: .4rem; font-size: .85rem; }
+.phive-row__xsd details ul, .phive-row__sch details ul { margin: .35rem 0 0; padding-left: 1.1rem; }
+.phive-row__sch li { margin-bottom: .4rem; }
+.phive-pass { color: var(--ok); margin: .2rem 0; }
+.phive-fail { color: var(--fail); font-weight: 600; }
+.phive-skip { color: var(--fg-light); margin: .2rem 0; }
+.phive-note { color: var(--fg-lighter); font-size: .75rem; }
+
+.phive-footer { max-width: 980px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; color: var(--fg-lighter); font-size: .8rem; border-top: 1px solid var(--border); }
+
+/* ── Tabs ──────────────────────────────────────────────────────────── */
+.phive__tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.phive__tab {
+  font: inherit; font-size: .9rem; font-weight: 600; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--fg-light); padding: .55rem .9rem; margin-bottom: -1px;
+}
+.phive__tab:hover { color: var(--fg); }
+.phive__tab.is-active { color: var(--primary); border-bottom-color: var(--primary); }
+.phive__tab-count { background: var(--code-bg); color: var(--fg-light); border-radius: 999px; padding: 0 .45rem; font-size: .72rem; font-weight: 700; }
+
+/* ── Analytics dashboard ───────────────────────────────────────────── */
+.phive-an__empty { color: var(--fg-light); font-size: .9rem; padding: 1.5rem 0; }
+.phive-an__toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; margin-bottom: 1.25rem; font-size: .82rem; }
+.phive-an__toolbar strong { align-self: center; color: var(--fg-light); }
+.phive-an__toolbar label { display: flex; flex-direction: column; gap: .15rem; color: var(--fg-light); }
+.phive-an__toolbar select, .phive-an__toolbar input {
+  font: inherit; font-size: .82rem; padding: .3rem .5rem; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--fg);
+}
+.phive-an__toolbar button {
+  font: inherit; font-size: .82rem; padding: .35rem .7rem; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-soft); color: var(--fg);
+}
+
+.phive-an__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: .6rem; margin-bottom: 1.5rem; }
+.phive-card { border: 1px solid var(--border); border-radius: 8px; padding: .7rem .8rem; background: var(--bg); display: flex; flex-direction: column; gap: .15rem; border-left: 4px solid var(--border); }
+.phive-card__n { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.phive-card__l { font-size: .74rem; color: var(--fg-light); text-transform: uppercase; letter-spacing: .03em; }
+.phive-card--ok   { border-left-color: var(--ok); }
+.phive-card--fail { border-left-color: var(--fail); }
+.phive-card--skip { border-left-color: var(--fg-lighter); }
+.phive-card--warn { border-left-color: var(--warn); }
+
+.phive-an__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+@media (max-width: 720px) { .phive-an__grid { grid-template-columns: 1fr; } }
+.phive-an__sec { margin: 1.25rem 0; }
+.phive-an__sec h3 { font-size: .95rem; margin: 0 0 .6rem; }
+
+.phive-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.phive-bars li { display: grid; grid-template-columns: minmax(7rem, 14rem) 1fr auto; align-items: center; gap: .6rem; font-size: .8rem; }
+.phive-bars__lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-light); }
+.phive-bars__track { background: var(--code-bg); border-radius: 4px; height: 1rem; overflow: hidden; }
+.phive-bars__fill { display: flex; height: 100%; min-width: 2px; border-radius: 4px; overflow: hidden; }
+.phive-seg { display: block; height: 100%; }
+.phive-seg--ok { background: var(--ok); }
+.phive-seg--fail { background: var(--fail); }
+.phive-seg--other { background: var(--fg-lighter); }
+.phive-bars__val { font-variant-numeric: tabular-nums; color: var(--fg); min-width: 3rem; text-align: right; }
+.phive-bars__val small { color: var(--fail); }
+
+.phive-an__tbl { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .4rem; }
+.phive-an__tbl th, .phive-an__tbl td { border: 1px solid var(--border); padding: .35rem .5rem; text-align: left; vertical-align: top; }
+.phive-an__tbl th { background: var(--bg-soft); position: sticky; top: 0; }
+.phive-an__msg { max-width: 32rem; }
+.phive-an__file { font-family: var(--mono); font-size: .92em; word-break: break-all; }
+.phive-link { font: inherit; background: none; border: none; color: var(--primary); cursor: pointer; padding: 0; }
+.phive-link:hover { text-decoration: underline; }
+.phive-pill { display: inline-block; font-size: .72rem; padding: .05rem .4rem; border-radius: 4px; }
+.phive-pill--ok { background: rgba(31,157,85,.16); color: var(--ok); }
+.phive-pill--fail { background: rgba(217,48,48,.18); color: var(--fail); }
+.phive-pill--skip { background: var(--code-bg); color: var(--fg-light); }
+.phive-tag { font-size: .68rem; padding: .02rem .35rem; border-radius: 4px; }
+.phive-tag--dep { background: rgba(214,145,26,.18); color: var(--warn); }
+.phive-badge--ok    { background: rgba(31,157,85,.16);  color: var(--ok); }
+.phive-badge--fail  { background: rgba(217,48,48,.18);  color: var(--fail); }
+.phive-badge--skip  { background: rgba(214,145,26,.18); color: var(--warn); }
+.phive-badge--error { background: rgba(217,48,48,.18);  color: var(--fail); }
+
+/* ── Print: the analytics report only ──────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body * { visibility: hidden !important; }
+  #phive-validator .phive__panel[data-panel="analytics"] { display: block !important; }
+  #phive-validator .phive__panel[data-panel="analytics"],
+  #phive-validator .phive__panel[data-panel="analytics"] * { visibility: visible !important; }
+  #phive-validator .phive__panel[data-panel="analytics"] { position: absolute; inset: 0 0 auto 0; width: 100%; padding: 0; }
+  .phive-an__grid { display: block; }
+  .phive-an__sec, .phive-an__tbl tr, .phive-card { break-inside: avoid; }
+  .phive-an__tbl th { position: static; }
+  .phive-badge, .phive-pill, .phive-seg, .phive-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

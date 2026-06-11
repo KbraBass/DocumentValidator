@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>phive-web — validate e-invoices in your browser</title>
+  <meta name="description" content="Standalone client-side XSD + Schematron validation for every format published by phive-rules. Documents never leave your browser.">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,600,700%7CJetBrains+Mono:400,700&display=fallback">
+  <link rel="stylesheet" href="./assets/phive.css">
+</head>
+<body>
+  <header class="phive-header">
+    <div class="phive-header__inner">
+      <h1>Validate e-invoices in your browser</h1>
+      <p>XSD structure + Schematron business rules for every format in
+        <a href="https://github.com/phax/phive-rules" style="color:#cfe2ff">phive-rules</a> —
+        EN&nbsp;16931, Peppol BIS, XRechnung, ZUGFeRD / Factur-X, and more.</p>
+    </div>
+  </header>
+
+  <main>
+    <p>Pick a format (or leave it on <strong>Auto-detect</strong>) and drop one or
+       more XML documents below. The page runs <strong>both</strong> validation
+       layers on each — XSD bundle (structure) and the format's Schematron
+       (business rules) — and shows the results inline.</p>
+
+    <div class="phive-callout">
+      <strong>Documents never leave the browser.</strong>
+      Every byte you pick is processed <em>entirely client-side</em> —
+      <code>xmllint-wasm</code> (libxml2) for XSD, Saxon-JS&nbsp;HE for
+      Schematron. The only network requests are the initial fetch of the
+      runtimes and the rule assets themselves. This page makes no upload.
+    </div>
+
+    <div class="phive-callout phive-callout--warn">
+      <strong>Caveat: browser extensions.</strong>
+      Like any web page, content you load here is visible to browser
+      extensions you have installed (ad blockers, translators, password
+      managers, etc.), which could read or exfiltrate it. That is outside
+      this page's control and <em>we are not responsible for it</em>. For
+      sensitive production documents, use a browser with no extensions or a
+      private / incognito window (where extensions are disabled by default).
+    </div>
+
+    <div id="phive-validator"
+         data-assets-base="./validation-assets/"
+         data-manifest="./validation-assets/manifest.json"
+         data-saxon-src="./assets/vendor/saxonjs/SaxonJS2.js"
+         data-xmllint-src="./assets/vendor/xmllint-wasm/index-browser.mjs"
+         data-xmllint-wasm-src="./assets/vendor/xmllint-wasm/xmllint.wasm">
+      <noscript><p>This tool requires JavaScript. The CLI alternative is
+        <code>uv run --with lxml --with saxonche --with pyyaml python tools/validate.py doc.xml</code>.</p></noscript>
+      <p>Loading validator…</p>
+    </div>
+
+    <h2>How auto-detect works</h2>
+    <p>The format is inferred from the document's <strong>root element</strong>;
+       for UBL and CII documents the <strong>Customization ID</strong>
+       (<code>cbc:CustomizationID</code>, or for CII
+       <code>ram:GuidelineSpecifiedDocumentContextParameter/ram:ID</code>)
+       narrows it to the exact rule set. Auto-detect always selects the
+       <strong>latest</strong> shipped version of the matching specification.
+       The most specific rule wins, e.g. an XRechnung document is detected as
+       XRechnung rather than plain EN&nbsp;16931.</p>
+
+    <h2>What each layer checks</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Engine</th><th>Catches</th></tr></thead>
+      <tbody>
+        <tr><td>XSD</td><td>xmllint-wasm (libxml2)</td>
+            <td>Element order / cardinality / type, missing required attributes, unknown elements.</td></tr>
+        <tr><td>Schematron</td><td>Saxon-JS HE</td>
+            <td>Calculation chains, VAT/tax math, code-list membership, conditional business rules — the EN&nbsp;16931 / Peppol / national rule sets.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Bulk runs</h2>
+    <p>Drop a whole batch at once — the <strong>XSD layer runs in a pool of Web
+       Workers (one per CPU core)</strong>, so large batches scale on powerful
+       machines; the Schematron layer runs on the main thread (Saxon-JS needs
+       the DOM, which Web Workers don't provide). The <strong>Analytics</strong>
+       tab then turns the batch into a printable, filterable dashboard.</p>
+    <p>Validating thousands of files is still memory-intensive in a browser.
+       For very large batches the CLI validator runs the same rules (lxml +
+       SaxonC&nbsp;HE) in a long-lived process:</p>
+    <p><code>uv&nbsp;run&nbsp;--with&nbsp;lxml&nbsp;--with&nbsp;saxonche&nbsp;--with&nbsp;pyyaml&nbsp;python&nbsp;tools/validate.py&nbsp;doc.xml</code></p>
+  </main>
+
+  <footer class="phive-footer">
+    Rule assets derived from <a href="https://github.com/phax/phive-rules">phax/phive-rules</a>
+    (see <code>validation-assets/manifest.json</code> for the pinned tag).
+    Schematron runs on Saxon-JS&nbsp;HE; XSD on libxml2-wasm. This page ships no analytics and makes no third-party calls beyond the web font.
+  </footer>
+
+  <script type="module" src="./assets/phive-validator.js"></script>
+</body>
+</html>
