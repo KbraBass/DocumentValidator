@@ -1,5 +1,6 @@
 # DocumentValidator
 Simple web-based Electronic Document Validation tool that uses Phax' phive-rules on a web front-end.
+Hosted as GitHub Page on https://kbrabass.github.io/DocumentValidator/site/
 
 The source of this service is described on https://peppol.helger.com/public/menuitem-validation-ws2  
 The original validation engine is on https://github.com/phax/phive  
