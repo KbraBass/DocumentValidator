@@ -1,8 +1,7 @@
 /* In-browser phive-rules validator (standalone).
  *
- * Adapted from the Basware SuperCore in-browser BIM validator. Renders a
- * format picker + multi-file drop zone inside `<div id="phive-validator">`,
- * then for each file:
+ * Renders a format picker + multi-file drop zone inside
+ * `<div id="phive-validator">`, then for each file:
  *   1. Parses the XML; reads root element + Customization ID.
  *   2. Resolves the validation format — the chosen drop-down entry, or, on
  *      "Auto-detect (latest)", the highest-priority matching rule from the
@@ -103,6 +102,7 @@ import { createValidator } from "./phive-engine.js";
 
   let queuedFiles = [];
   let lastResults = [];          // structured per-file records (drives Analytics)
+  let _timing = null;            // last run's wall-clock timing (drives the dashboard)
 
   fileInput.addEventListener("change", () => addFiles([...fileInput.files]));
   dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("is-drag"); });
@@ -117,6 +117,7 @@ import { createValidator } from "./phive-engine.js";
     queuedFiles = [];
     listEl.innerHTML = "";
     lastResults = [];
+    _timing = null;
     buildAnalytics();
     runBtn.disabled = true;
     clearBtn.disabled = true;
@@ -330,8 +331,10 @@ import { createValidator } from "./phive-engine.js";
     lastResults = [];
     statusEl.textContent = "Loading runtimes…";
 
+    const t0 = performance.now();
     const manifest = await loadManifest();
     await ensureEngines();
+    const tValidate = performance.now();      // engines ready — validation starts
     const lanes = _pool || [null];     // null lane = XSD on the main engine
     const note = _pool ? ` · ${_pool.length} workers (XSD)` : "";
     const total = queuedFiles.length;
@@ -339,6 +342,14 @@ import { createValidator } from "./phive-engine.js";
     lastResults = new Array(total);
     let done = 0, next = 0;
     statusEl.textContent = `Validating 0 / ${total}${note}`;
+
+    function progress() {
+      const secs = (performance.now() - tValidate) / 1000;
+      const rate = secs > 0 ? done / secs : 0;
+      const eta = rate > 0 ? (total - done) / rate : 0;
+      statusEl.textContent = `Validating ${done} / ${total} · `
+        + `${rate.toFixed(1)}/s` + (done < total ? ` · ETA ${fmtDur(eta * 1000)}` : "") + note;
+    }
 
     // Each lane pulls the next file until the queue drains → parallel across
     // workers, results land back on the main thread for DOM rendering.
@@ -352,7 +363,9 @@ import { createValidator } from "./phive-engine.js";
           name: file.name, formatKey: null, formatLabel: null, group: null,
           deprecated: false, auto: false, match: null, root: "", custom: "",
           xsd: "na", sch: "na", failures: [], outcome: "error",
+          ms: 0, xsdMs: 0, schMs: 0,
         };
+        const ft0 = performance.now();
         try {
           const text = await file.text();
           const meta = inspectDocument(text);
@@ -366,8 +379,12 @@ import { createValidator } from "./phive-engine.js";
             rec.formatKey = fmt.key; rec.formatLabel = fmt.label;
             rec.group = fmt.group || "?"; rec.deprecated = !!fmt.deprecated;
             // XSD in parallel on a worker; Schematron on the main engine.
+            const a = performance.now();
             const xsd = await xsdOn(w, text, fmt);
+            const b = performance.now();
             const sch = parseSvrl(await _mainEngine.validateSchematronOnly(text, fmt));
+            const c = performance.now();
+            rec.xsdMs = b - a; rec.schMs = c - b;
             renderXsd(row, xsd);
             renderSch(row, sch);
             rec.xsd = xsd.skipped ? "skip" : (xsd.passed ? "pass" : "fail");
@@ -383,14 +400,21 @@ import { createValidator } from "./phive-engine.js";
           rec.outcome = "error";
           markRow(row, "error", "Error: " + (err.message || err));
         }
+        rec.ms = performance.now() - ft0;
         lastResults[i] = rec;
         done++;
-        statusEl.textContent = `Validating ${done} / ${total}${note}`;
+        progress();
       }
     }
 
     await Promise.all(lanes.map(lane));
-    statusEl.textContent = `Done — ${total} file(s)${note}`;
+    const tEnd = performance.now();
+    _timing = {
+      total: tEnd - t0, load: tValidate - t0, validation: tEnd - tValidate,
+      files: total, workers: _pool ? _pool.length : 1,
+    };
+    statusEl.textContent = `Done — ${total} file(s) in ${fmtDur(_timing.validation)} · `
+      + `${(total / (_timing.validation / 1000 || 1)).toFixed(1)}/s${note}`;
     runBtn.disabled = false;
     clearBtn.disabled = false;
     buildAnalytics();
@@ -473,6 +497,20 @@ import { createValidator } from "./phive-engine.js";
   function escapeHtml(s) {
     return String(s ?? "")
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  function fmtDur(ms) {
+    if (!isFinite(ms) || ms < 0) return "—";
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    const m = Math.floor(ms / 60000), s = Math.round((ms % 60000) / 1000);
+    return `${m}m${String(s).padStart(2, "0")}s`;
+  }
+
+  function percentile(sorted, p) {           // sorted ascending
+    if (!sorted.length) return 0;
+    const i = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+    return sorted[i];
   }
 
   // ── Analytics dashboard ───────────────────────────────────────────
@@ -622,6 +660,36 @@ import { createValidator } from "./phive-engine.js";
           </tr>`).join("")}</tbody>
       </table>` : `<p class="phive-note">No Schematron failures in the current selection. 🎉</p>`;
 
+    // Processing time. Batch wall-clock comes from the whole run (_timing);
+    // per-file latency stats from the filtered selection.
+    const durs = rows.map(r => r.ms).filter(n => n > 0).sort((a, b) => a - b);
+    const sum = durs.reduce((a, b) => a + b, 0);
+    const xsdSum = rows.reduce((a, r) => a + (r.xsdMs || 0), 0);
+    const schSum = rows.reduce((a, r) => a + (r.schMs || 0), 0);
+    const timeStats = (() => {
+      if (!_timing) return "";
+      const wall = _timing.validation;
+      const thru = wall > 0 ? (_timing.files / (wall / 1000)) : 0;
+      const grid = `
+        <div class="phive-an__cards">
+          ${card(fmtDur(_timing.validation), "Validation time")}
+          ${card(thru.toFixed(1) + "/s", "Throughput")}
+          ${card(fmtDur(_timing.load), "Engine load")}
+          ${card(_timing.workers, "XSD workers")}
+          ${card(durs.length ? fmtDur(sum / durs.length) : "—", "Avg / file")}
+          ${card(fmtDur(percentile(durs, 50)), "Median / file")}
+          ${card(fmtDur(percentile(durs, 95)), "p95 / file")}
+        </div>
+        ${segBars([
+          { key: "XSD (Σ, parallel)", total: Math.round(xsdSum), pass: 0, fail: 0, other: Math.round(xsdSum) },
+          { key: "Schematron (Σ, serial)", total: Math.round(schSum), pass: Math.round(schSum), fail: 0, other: 0 },
+        ])}
+        <p class="phive-note">Per-layer totals are summed across files (ms); XSD runs in
+          parallel across workers, so its wall-clock share is much smaller than the sum.</p>`;
+      return section("Processing time", grid,
+        `batch ${fmtDur(_timing.total)} total (incl. ${fmtDur(_timing.load)} load)`);
+    })();
+
     const fileCap = 500;
     const fileTable = `
       <table class="phive-an__tbl">
@@ -651,6 +719,7 @@ import { createValidator } from "./phive-engine.js";
         ${section("By format family (module)", segBars(byGroup))}
       </div>
       ${section("By format", segBars(byFormat), byFormat.length === 12 ? "top 12" : "")}
+      ${timeStats}
       ${section("Top 10 failing rules", topErrTable, "click a rule to filter")}
       ${section(`Files (${rows.length})`, fileTable)}`;
 

@@ -1,8 +1,7 @@
 /* phive-web — standalone styling.
  *
- * Self-contained: no mkdocs / Material dependency. Colour tokens and the
- * validator widget styles are adapted from the Basware SuperCore theme so
- * the look is consistent, renamed to the `phive-*` namespace.
+ * Self-contained: no framework dependency. All classes live in the `phive-*`
+ * namespace.
  */
 
 :root {

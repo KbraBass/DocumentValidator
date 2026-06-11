@@ -1,0 +1,44 @@
+# macOS
+.DS_Store
+
+# Editor / tooling
+.idea/
+.vscode/
+.claude/
+*.swp
+
+# Python (uv-managed virtual environment + caches)
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+# uv.lock IS committed.
+
+# ── Orchestrator scratch ────────────────────────────────────────────
+# Everything under work/ is fetched, not authored:
+#   work/phive-rules/  — shallow+sparse clone of phax/phive-rules @ the
+#                        tracked ref, plus the .sef.json compiled in place.
+#   work/deps/         — Maven artefacts (ph-ubl21, ph-cii-d16b, …) pulled
+#                        from Maven Central and the XSDs extracted from them.
+# Only the *transformed / copied* artefacts under site/validation-assets/
+# are committed — never the upstream sources they were derived from.
+work/
+
+/node_modules/
+
+# ── Vendored engines (fetched at build by fetch_vendor.py) ──────────
+# Pinned in config/sources.yaml; not committed. The browser runtime lands
+# in site/assets/vendor/ (shipped in the deployed site), the Node SEF
+# compiler under work/vendor/ (covered by work/ above).
+site/assets/vendor/
+
+# ── Generated validation assets ─────────────────────────────────────
+# The orchestrator (tools/update.sh) regenerates these from the pinned
+# upstream sources. For the full phive-rules corpus this is hundreds of
+# MB of (gzipped) SEF, so it is a build output, not committed. Deploy =
+# run the orchestrator, then publish site/. The manifest + SEF + XSD all
+# live here.
+site/validation-assets/

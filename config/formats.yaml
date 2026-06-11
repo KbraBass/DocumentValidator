@@ -1,0 +1,135 @@
+# phive-web — format catalogue + auto-detect rules.
+#
+# This is the single source of truth that turns the raw phive-rules
+# artefacts (compiled to SEF by the orchestrator) into:
+#   1. the entries of the format drop-down on the page, and
+#   2. the ordered auto-detect rule list.
+#
+# We author this rather than parse phive-rules' Java VES registry — it is
+# reviewable, stable, and lets us compose multi-ruleset chains (e.g.
+# XRechnung = EN 16931 + the national layer) explicitly.
+#
+# ── How a family is resolved (tools/build_manifest.py) ──────────────
+# For every `schematron` source the builder globs
+#   work/phive-rules/phive-rules-<module>/src/main/resources/external/schematron/<path>
+# replacing the `{v}` placeholder with `*`, discovers every version
+# present, and keeps the LATEST (numeric-aware sort). The compiled
+# `.sef.json` beside each chosen `.xslt` is copied into
+# site/validation-assets/schematron/<key>/<version>/…. The full version
+# list is published so the drop-down can offer older versions too.
+#
+# ── Auto-detect ─────────────────────────────────────────────────────
+# Families are tried in DESCENDING `priority`. The first whose `detect`
+# block matches the document (root element, then — for UBL/CII — the
+# Customization ID) wins. Because each family already resolves to its
+# LATEST version, auto-detect "only uses the latest available
+# specifications" by construction. `Auto-detect (latest)` is the default
+# (first) drop-down option; picking a family by hand pins that family
+# (and lets the user choose an older version).
+#
+# Customization-ID matchers (most specific → least): `contains`,
+# `exact`, `prefix`. A family with no `customization_*` matches on root
+# element alone (lowest specificity — keep its priority low).
+
+# ── Auto-discovery ──────────────────────────────────────────────────
+# Every compiled ruleset NOT consumed by a curated family below is also
+# surfaced in the drop-down automatically (grouped by module, latest
+# version, Schematron-only, manual-select) — so the corpus drives the UI
+# and new upstream rulesets appear on the next orchestrator run with no
+# edits here. `ignore` is an optional list of glob patterns (matched
+# against `<relpath>` and `<module>/<relpath>` under each module's
+# external/schematron/) to drop known non-entry-point fragments from the
+# drop-down. Empty = surface everything.
+discovery:
+  ignore: []
+
+# Well-known root elements, referenced by alias below.
+roots:
+  ubl-invoice:    { ns: "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2",    local: Invoice }
+  ubl-creditnote: { ns: "urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2", local: CreditNote }
+  cii-invoice:    { ns: "urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100", local: CrossIndustryInvoice }
+
+families:
+  # ── XRechnung (most specific: national layer on top of EN 16931) ──
+  - key: xrechnung-ubl
+    label: "XRechnung (UBL)"
+    priority: 40
+    root: ubl-invoice
+    schematron:
+      - { module: en16931,   path: "{v}/ubl/EN16931-UBL-validation.xslt" }
+      - { module: xrechnung, path: "{v}/XRechnung-UBL-validation.xslt" }
+    xsd: { dep: ph-ubl21, entry: "maindoc/UBL-Invoice-2.1.xsd" }
+    detect: { customization_contains: ["xrechnung"] }
+
+  - key: xrechnung-cii
+    label: "XRechnung (CII)"
+    priority: 40
+    root: cii-invoice
+    schematron:
+      - { module: en16931,   path: "{v}/cii/EN16931-CII-validation.xslt" }
+      - { module: xrechnung, path: "{v}/XRechnung-CII-validation.xslt" }
+    xsd: { dep: ph-cii-d16b, entry: "d16b/data/standard/CrossIndustryInvoice_100pD16B.xsd" }
+    detect: { customization_contains: ["xrechnung"] }
+
+  # ── ZUGFeRD / Factur-X EN 16931 profile (CII) ───────────────────────
+  - key: zugferd-en16931
+    label: "ZUGFeRD / Factur-X (EN 16931, CII)"
+    priority: 35
+    root: cii-invoice
+    schematron:
+      - { module: zugferd, path: "{v}/FACTUR-X_EN16931.xslt" }
+    xsd: { dep: ph-cii-d16b, entry: "d16b/data/standard/CrossIndustryInvoice_100pD16B.xsd" }
+    detect: { customization_contains: ["factur-x.eu", "zugferd"] }
+
+  # ── Peppol BIS Billing 3.0 (UBL) ────────────────────────────────────
+  - key: peppol-billing-invoice
+    label: "Peppol BIS Billing 3.0 — Invoice (UBL)"
+    priority: 30
+    root: ubl-invoice
+    schematron:
+      - { module: peppol, path: "openpeppol/{v}/xslt/CEN-EN16931-UBL.xslt" }
+      - { module: peppol, path: "openpeppol/{v}/xslt/PEPPOL-EN16931-UBL.xslt" }
+    xsd: { dep: ph-ubl21, entry: "maindoc/UBL-Invoice-2.1.xsd" }
+    detect:
+      customization_exact:
+        - "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
+
+  - key: peppol-billing-creditnote
+    label: "Peppol BIS Billing 3.0 — Credit Note (UBL)"
+    priority: 30
+    root: ubl-creditnote
+    schematron:
+      - { module: peppol, path: "openpeppol/{v}/xslt/CEN-EN16931-UBL.xslt" }
+      - { module: peppol, path: "openpeppol/{v}/xslt/PEPPOL-EN16931-UBL.xslt" }
+    xsd: { dep: ph-ubl21, entry: "maindoc/UBL-CreditNote-2.1.xsd" }
+    detect:
+      customization_exact:
+        - "urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0"
+
+  # ── EN 16931 plain (least specific catch-all for the EN family) ─────
+  - key: en16931-ubl-invoice
+    label: "EN 16931 — Invoice (UBL)"
+    priority: 10
+    root: ubl-invoice
+    schematron:
+      - { module: en16931, path: "{v}/ubl/EN16931-UBL-validation.xslt" }
+    xsd: { dep: ph-ubl21, entry: "maindoc/UBL-Invoice-2.1.xsd" }
+    detect: { customization_prefix: ["urn:cen.eu:en16931:2017"] }
+
+  - key: en16931-ubl-creditnote
+    label: "EN 16931 — Credit Note (UBL)"
+    priority: 10
+    root: ubl-creditnote
+    schematron:
+      - { module: en16931, path: "{v}/ubl/EN16931-UBL-validation.xslt" }
+    xsd: { dep: ph-ubl21, entry: "maindoc/UBL-CreditNote-2.1.xsd" }
+    detect: { customization_prefix: ["urn:cen.eu:en16931:2017"] }
+
+  - key: en16931-cii
+    label: "EN 16931 — Invoice (CII)"
+    priority: 10
+    root: cii-invoice
+    schematron:
+      - { module: en16931, path: "{v}/cii/EN16931-CII-validation.xslt" }
+    xsd: { dep: ph-cii-d16b, entry: "d16b/data/standard/CrossIndustryInvoice_100pD16B.xsd" }
+    detect: { customization_prefix: ["urn:cen.eu:en16931:2017"] }

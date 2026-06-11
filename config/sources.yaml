@@ -1,0 +1,77 @@
+# phive-web — upstream source configuration.
+#
+# Drives tools/fetch_phive.py (the git clone) and tools/fetch_deps.py
+# (the Maven XSD dependencies). The orchestrator never hard-codes a
+# version: every artefact is pinned here so a fresh `update.sh` is
+# reproducible.
+
+# ── phive-rules repository ──────────────────────────────────────────
+repo: https://github.com/phax/phive-rules.git
+
+# Which upstream ref to track. `fetch_phive.py` re-fetches this on every run
+# and moves to its latest commit, so the value decides how new formats arrive:
+#   • a branch, e.g. `master`  → picks up modules/versions as soon as Helger
+#                                pushes them (e.g. ZUGFeRD 2.5 lands here before
+#                                it's in any release). Moves over time.
+#   • `latest` / `latest-release` → the newest GitHub *release* tag, resolved
+#                                via the API each run. Released formats only.
+#   • a fixed tag, e.g. `phive-rules-parent-pom-4.3.7` → fully reproducible;
+#                                only changes when you bump it here.
+# The exact commit is recorded in manifest.json (source.commit) either way.
+tag: master
+
+# Ingest scope.
+#   all: true   → sparse-checkout EVERY phive-rules-* module and compile
+#                 every committed XSLT to SEF (the full corpus — large).
+#   all: false  → only the modules in `core_set` below.
+all: true
+
+# Modules compiled + shipped by the committed build. Each name maps to a
+# `phive-rules-<name>` Maven module. Adding a module here is all it takes
+# to bring its rulesets into the pipeline; wiring it into a selectable
+# format + auto-detect rule is done in config/formats.yaml.
+core_set:
+  - en16931      # EN 16931 (UBL + CII) — the European semantic core
+  - peppol       # Peppol BIS Billing / PINT (openpeppol rules)
+  - xrechnung    # German XRechnung (UBL + CII, layered on EN 16931)
+  - zugferd      # ZUGFeRD / Factur-X (CII profiles)
+
+# ── Base XSD dependencies ───────────────────────────────────────────
+# phive-rules modules do NOT vendor the base UBL / CII XSDs. fetch_deps.py
+# obtains them, extracts the schema tree into the gitignored
+# work/deps/schemas/<name>/, and build_manifest.py copies only the
+# closure each format needs into the committed site. `name` is the local
+# handle referenced by config/formats.yaml `xsd.dep`.
+
+# Maven Central artefacts. Each version is resolved from the cloned
+# phive-rules parent POM's <properties> (e.g. ${ph-cii.version}); the JAR
+# is fetched (via `mvn` if present, else direct from repo1.maven.org) and
+# `external/schemas/**` extracted (that prefix stripped).
+maven_xsd_deps:
+  - name: ph-cii-d16b
+    group: com.helger.cii
+    artifact: ph-cii-d16b
+    version_property: ph-cii.version
+
+# Authoritative standards-body schema distributions, fetched as a zip and
+# the `subdir` extracted (its leading path stripped so `entry` in
+# formats.yaml is relative to it). Used where the Maven repackaging is not
+# self-contained for strict (libxml2) validation — notably ph-ubl strips
+# the CCT / xmldsig / XAdES imports that the OASIS UBL 2.1 set bundles
+# intact. phive-rules' UBL formats are UBL 2.1, matching this set.
+zip_xsd_deps:
+  - name: ph-ubl21
+    url: https://docs.oasis-open.org/ubl/os-UBL-2.1/UBL-2.1.zip
+    subdir: xsd/          # extract files under this, stripping the prefix
+
+# ── Vendored engines (fetched at build by fetch_vendor.py) ──────────
+# Pinned so builds are reproducible. The browser Saxon-JS build isn't on
+# npm — only Saxonica's versioned zip ships it — so it comes from there;
+# the rest come from the npm CDN (jsDelivr). Fetched into the gitignored
+# site/assets/vendor/ (browser runtime) and work/vendor/ (Node SEF compiler).
+vendor:
+  cdn: https://cdn.jsdelivr.net/npm
+  saxon_browser_zip: https://downloads.saxonica.com/SaxonJS/2/SaxonJS-2.7.zip
+  saxon_js: "2.7.0"          # npm saxon-js → SaxonJS2N.js (Node build for xslt3)
+  xslt3: "2.7.0"             # npm xslt3 CLI (compiles Schematron XSLT → SEF)
+  xmllint_wasm: "4.0.2"      # npm xmllint-wasm → browser XSD engine

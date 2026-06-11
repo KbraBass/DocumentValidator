@@ -1,0 +1,23 @@
+[
+  {
+    "file": "tests/fixtures/peppol-billing-invoice-valid.xml",
+    "expect_format": "eu.peppol.bis3:invoice:2026.5",
+    "expect_badge": "Pass",
+    "expect_match": "exact",
+    "note": "EXACT Customization-ID match (Peppol BIS Billing 3.0) → green banner; both layers pass"
+  },
+  {
+    "file": "tests/fixtures/peppol-billing-invoice-invalid.xml",
+    "expect_format": "eu.peppol.bis3:invoice:2026.5",
+    "expect_badge": "Fail",
+    "expect_match": "exact",
+    "note": "same EXACT-match format; corrupted PayableAmount → Schematron BR-CO-16 fails"
+  },
+  {
+    "file": "tests/fixtures/en16931-cii-invoice-valid.xml",
+    "expect_format": "eu.cen.en16931:cii:1.3.16",
+    "expect_badge": "Pass",
+    "expect_match": "best",
+    "note": "PREFIX/startswith match (urn:cen.eu:en16931:2017) → yellow best-match banner"
+  }
+]

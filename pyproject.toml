@@ -1,0 +1,39 @@
+# phive-web — Python tooling manifest.
+#
+# This file exists primarily so editors / IDEs (VSCode, PyCharm, …) can
+# resolve imports used by the scripts under tools/. Run `uv sync` once
+# after cloning to create `.venv/` — VSCode auto-detects it.
+#
+# Each script also works in isolation via `uv run --with <deps> python …`
+# (uv resolves dependencies standalone, no venv required); that is what
+# tools/update.sh does, so a venv is optional.
+#
+# Dependency usage:
+#   pyyaml    — config readers (sources.yaml, formats.yaml) in every tool
+#   lxml      — XSD validation in the CLI validator (validate.py) and the
+#               build-time fixture checks
+#   saxonche  — SaxonC HE (XSLT 3.0) for Schematron validation in the CLI
+#               validator (validate.py) — the headless mirror of Saxon-JS
+#   playwright — drives a real Chromium through site/index.html for the
+#               end-to-end browser test (validate_browser_headless.py)
+#
+# NOTE: SEF compilation does NOT use Python — it shells out to Node + the
+# vendored xslt3 CLI under tools/vendor/xslt3/ (see tools/compile_sef.py).
+
+[project]
+name = "phive-web-tools"
+version = "0.1.0"
+description = "Orchestrator for the standalone client-side phive-rules validator"
+requires-python = ">=3.10"
+dependencies = [
+    "pyyaml>=6.0",
+    "lxml>=5.0",
+    "saxonche>=12.5",
+]
+
+[project.optional-dependencies]
+# Only needed for the headless browser verification step.
+test = ["playwright>=1.44"]
+
+[tool.uv]
+managed = true

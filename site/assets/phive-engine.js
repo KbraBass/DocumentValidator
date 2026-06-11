@@ -14,8 +14,9 @@
 export function createValidator(paths) {
   const assetUrl = (rel) => new URL(rel, paths.assetsBase).toString();
   let _saxon, _xmllint;
-  const _xsdCache = {};   // xsd entry rel → { entryBase, files }
-  const _sefCache = {};   // sef url → decompressed text
+  const _xsdCache = {};        // xsd entry rel → { entryBase, files }
+  const _sefCache = {};        // sef url → decompressed text (transient)
+  const _sefInternal = {};     // sef url → parsed SEF object (reused per transform)
 
   // Saxon-JS is a classic script that attaches to the global object. On the
   // main thread we inject a <script>; in a worker (no document) we fetch and
@@ -92,6 +93,17 @@ export function createValidator(paths) {
     return (_sefCache[u] = text);
   }
 
+  // Parse a SEF to a JS object ONCE and reuse it. Passing Saxon-JS a
+  // pre-parsed SEF via `stylesheetInternal` skips the (multi-MB) JSON.parse +
+  // SEF load that `stylesheetText` would redo on every single file — the
+  // dominant per-file cost when validating a batch of one format.
+  async function sefObject(u) {
+    if (_sefInternal[u]) return _sefInternal[u];
+    const obj = JSON.parse(await fetchSef(u));
+    delete _sefCache[u];            // keep only the parsed form
+    return (_sefInternal[u] = obj);
+  }
+
   async function validateXsd(xmllint, xmlText, fmt) {
     if (!fmt.xsd) return { skipped: "format ships no XSD layer" };
     const { entryBase, files } = await loadXsd(fmt.xsd);
@@ -116,13 +128,13 @@ export function createValidator(paths) {
     const svrls = [];
     for (const sefRel of fmt.schematron) {
       const sefAbs = assetUrl(sefRel);
-      let sefText;
-      try { sefText = await fetchSef(sefAbs); }
+      let sef;
+      try { sef = await sefObject(sefAbs); }
       catch (e) { return { skipped: `SEF fetch failed: ${sefRel}` }; }
       let svrl;
       try {
         const result = await saxon.transform({
-          stylesheetText: sefText,
+          stylesheetInternal: sef,    // reuse the parsed SEF (compile-once)
           sourceText: xmlText,
           destination: "serialized",
           baseOutputURI: paths.assetsBase,

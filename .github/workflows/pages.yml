@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+# Builds the validation assets (site/validation-assets/ is gitignored — it is a
+# build output) and publishes site/ to GitHub Pages. Using the Pages *artifact*
+# deploy (not branch deploy) means Jekyll never runs, so the asset trees ship
+# verbatim.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a newer push supersede an in-flight run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Node.js          # needed by tools/compile_sef.py (vendored xslt3)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build validation assets
+        # --clean: start from a blank slate (no stale state carried over).
+        # --prune: drop work/ (clone, JARs, uncompressed SEFs) after the build —
+        #          only site/validation-assets/ is needed for the artifact.
+        run: bash tools/update.sh --clean --prune
+        # Heavy steps are best-effort/guarded; the Playwright smoke test is
+        # skipped automatically (not installed). Scope is config/sources.yaml
+        # (`all: true` builds the full corpus — slower, larger).
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
