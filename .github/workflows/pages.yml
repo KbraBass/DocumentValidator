@@ -38,7 +38,7 @@ jobs:
         # --clean: start from a blank slate (no stale state carried over).
         # --prune: drop work/ (clone, JARs, uncompressed SEFs) after the build —
         #          only site/validation-assets/ is needed for the artifact.
-        run: bash tools/update.sh --clean --prune
+        run: bash tools/update.sh --prune # use --clean for a fresh deploy.
         # Heavy steps are best-effort/guarded; the Playwright smoke test is
         # skipped automatically (not installed). Scope is config/sources.yaml
         # (`all: true` builds the full corpus — slower, larger).
