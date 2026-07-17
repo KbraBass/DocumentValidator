@@ -113,9 +113,10 @@ th { background: var(--bg-soft); }
 .phive-badge { font-size: .75rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; white-space: nowrap; }
 .phive-badge--running { background: var(--code-bg); color: var(--fg-light); }
 .phive-badge--ok    { background: rgba(31,157,85,.16);  color: var(--ok); }
+.phive-badge--warn  { background: rgba(214,145,26,.18); color: var(--warn); }
 .phive-badge--fail  { background: rgba(217,48,48,.18);  color: var(--fail); }
-.phive-badge--skip  { background: rgba(214,145,26,.18); color: var(--warn); }
-.phive-badge--error { background: rgba(217,48,48,.18);  color: var(--fail); }
+.phive-badge--skip  { background: var(--code-bg);       color: var(--fg-light); }
+.phive-badge--error { background: rgba(217,48,48,.28);  color: var(--fail); font-weight: 800; }
 
 .phive-row__banner:empty { display: none; }
 .phive-banner {
@@ -139,6 +140,7 @@ th { background: var(--bg-soft); }
 .phive-row__sch li { margin-bottom: .4rem; }
 .phive-pass { color: var(--ok); margin: .2rem 0; }
 .phive-fail { color: var(--fail); font-weight: 600; }
+.phive-warn { color: var(--warn); font-weight: 600; }
 .phive-skip { color: var(--fg-light); margin: .2rem 0; }
 .phive-note { color: var(--fg-lighter); font-size: .75rem; }
 
@@ -190,10 +192,12 @@ th { background: var(--bg-soft); }
 .phive-bars__fill { display: flex; height: 100%; min-width: 2px; border-radius: 4px; overflow: hidden; }
 .phive-seg { display: block; height: 100%; }
 .phive-seg--ok { background: var(--ok); }
+.phive-seg--warn { background: var(--warn); }
 .phive-seg--fail { background: var(--fail); }
 .phive-seg--other { background: var(--fg-lighter); }
 .phive-bars__val { font-variant-numeric: tabular-nums; color: var(--fg); min-width: 3rem; text-align: right; }
 .phive-bars__val small { color: var(--fail); }
+.phive-bars__val small.phive-bars__warn { color: var(--warn); }
 
 .phive-an__tbl { width: 100%; border-collapse: collapse; font-size: .8rem; margin-top: .4rem; }
 .phive-an__tbl th, .phive-an__tbl td { border: 1px solid var(--border); padding: .35rem .5rem; text-align: left; vertical-align: top; }
@@ -204,14 +208,11 @@ th { background: var(--bg-soft); }
 .phive-link:hover { text-decoration: underline; }
 .phive-pill { display: inline-block; font-size: .72rem; padding: .05rem .4rem; border-radius: 4px; }
 .phive-pill--ok { background: rgba(31,157,85,.16); color: var(--ok); }
+.phive-pill--warn { background: rgba(214,145,26,.18); color: var(--warn); }
 .phive-pill--fail { background: rgba(217,48,48,.18); color: var(--fail); }
 .phive-pill--skip { background: var(--code-bg); color: var(--fg-light); }
 .phive-tag { font-size: .68rem; padding: .02rem .35rem; border-radius: 4px; }
 .phive-tag--dep { background: rgba(214,145,26,.18); color: var(--warn); }
-.phive-badge--ok    { background: rgba(31,157,85,.16);  color: var(--ok); }
-.phive-badge--fail  { background: rgba(217,48,48,.18);  color: var(--fail); }
-.phive-badge--skip  { background: rgba(214,145,26,.18); color: var(--warn); }
-.phive-badge--error { background: rgba(217,48,48,.18);  color: var(--fail); }
 
 /* ── Print: the analytics report only ──────────────────────────────── */
 @media print {

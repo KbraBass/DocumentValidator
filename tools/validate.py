@@ -124,10 +124,13 @@ def validate_schematron(doc, fmt, formats_cfg):
             sdoc = etree.fromstring(svrl.encode("utf-8"))
             for fa in sdoc.iter(f"{{{SVRL}}}failed-assert"):
                 text_el = fa.find(f"{{{SVRL}}}text")
+                flag = (fa.get("flag") or fa.get("role") or "").strip().lower()
+                severity = "warning" if flag in ("warning", "warn", "info", "information") else "fatal"
                 failures.append({
                     "id": fa.get("id"),
                     "location": fa.get("location"),
                     "text": (text_el.text or "").strip() if text_el is not None else "",
+                    "severity": severity,
                 })
     return failures
 
@@ -171,14 +174,23 @@ def main() -> int:
             print("  XSD:        pass")
 
         sch = validate_schematron(doc, fmt, formats_cfg)
-        if sch:
-            print(f"  Schematron: FAIL — {len(sch)} rule(s)")
-            for f in sch[:20]:
-                print(f"              [{f['id']}] {f['text']}")
+        sch_errs = [f for f in sch if f["severity"] != "warning"]
+        sch_warns = [f for f in sch if f["severity"] == "warning"]
+        if sch_errs:
+            print(f"  Schematron: FAIL — {len(sch_errs)} error(s)"
+                  + (f", {len(sch_warns)} warning(s)" if sch_warns else ""))
+        elif sch_warns:
+            print(f"  Schematron: pass with {len(sch_warns)} warning(s)")
         else:
             print("  Schematron: pass")
+        for f in sch_errs[:20]:
+            print(f"              [error]   [{f['id']}] {f['text']}")
+        for f in sch_warns[:20]:
+            print(f"              [warning] [{f['id']}] {f['text']}")
 
-        if (xsd_errs) or sch:
+        # Warnings do not reject the document — only XSD or fatal Schematron
+        # errors set a non-zero exit code.
+        if xsd_errs or sch_errs:
             rc = 1
     return rc
 

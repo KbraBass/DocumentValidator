@@ -38,12 +38,16 @@ selectable formats are authored in [`config/formats.yaml`](config/formats.yaml).
 During a run the status bar shows live throughput and ETA
 (`Validating X / N · R/s · ETA …`). After validating a batch, the
 **Analytics** tab turns the results into a printable dashboard: summary cards
-(files / passed / failed / pass-rate / deprecated-format / best-match-detect),
-a **processing-time** section (total time, throughput, engine load, and
-per-file avg / median / p95, plus the XSD-vs-Schematron split), segmented
-pass/fail bars by format and by module, a **top-10 failing Schematron rules**
-table, and a per-file table.
-Filter by outcome, format, error rule (click a rule to drill in), or filename
+(files / passed / **passed with warnings** / failed / pass-rate /
+warnings-total / deprecated-format / best-match-detect), a **processing-time**
+section (total time, throughput, engine load, and per-file avg / median / p95,
+plus the XSD-vs-Schematron split), segmented pass/warning/fail bars by format
+and by module, a **top-10 failing Schematron rules** table (each tagged error
+vs warning), and a per-file table with separate error and warning counts.
+Outcomes are three-way: a file **passes**, **passes with warnings** (only
+`flag="warning"` Schematron assertions fired — the document is still valid), or
+**fails** (an XSD error or a fatal Schematron assertion).
+Filter by outcome, format, rule (click a rule to drill in), or filename
 to spot trends and decide what to fix first; **🖨 Print report** produces a
 clean hard copy. It all runs client-side on the same in-browser results.
 
