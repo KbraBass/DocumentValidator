@@ -250,8 +250,20 @@ import { createValidator } from "./phive-engine.js";
     return { fmt, auto: true, match: hit ? hit.match : null };
   }
 
+  // A failed assertion's severity is carried by the SVRL `flag` attribute
+  // (phive-rules EN16931 / Peppol / XRechnung use flag="fatal" | "warning"),
+  // with `role` as a fallback for rulesets that use it instead. Anything that
+  // isn't explicitly a warning-like flag counts as a blocking error — so
+  // unflagged rulesets keep their old "every failure fails the file" meaning.
+  function svrlSeverity(node) {
+    const flag = (node.getAttribute("flag") || node.getAttribute("role") || "").trim().toLowerCase();
+    return (flag === "warning" || flag === "warn" || flag === "info" || flag === "information")
+      ? "warning" : "fatal";
+  }
+
   // The engine (worker or fallback) returns RAW SVRL; parse it into failures
-  // here on the main thread (DOMParser is unavailable in workers).
+  // here on the main thread (DOMParser is unavailable in workers). Failures are
+  // split by severity: `errors` block the file, `warnings` don't.
   function parseSvrl(sch) {
     if (sch.skipped) return { skipped: sch.skipped, error: !!sch.error };
     const failures = [];
@@ -264,10 +276,14 @@ import { createValidator } from "./phive-engine.js";
           location: node.getAttribute("location"),
           text: (node.getElementsByTagNameNS(SVRL_NS, "text")[0]?.textContent || "").trim(),
           ruleset,
+          severity: svrlSeverity(node),
         });
       }
     }
-    return failures.length ? { passed: false, failures } : { passed: true, failures: [] };
+    const errors = failures.filter(f => f.severity !== "warning");
+    const warnings = failures.filter(f => f.severity === "warning");
+    // `passed` = no blocking errors (warnings alone don't fail the layer).
+    return { passed: errors.length === 0, failures, errors, warnings };
   }
 
   // ── Engines ───────────────────────────────────────────────────────
@@ -374,8 +390,8 @@ import { createValidator } from "./phive-engine.js";
         const rec = {
           name: file.name, formatKey: null, formatLabel: null, group: null,
           deprecated: false, auto: false, match: null, root: "", custom: "",
-          xsd: "na", sch: "na", failures: [], outcome: "error",
-          ms: 0, xsdMs: 0, schMs: 0,
+          xsd: "na", sch: "na", failures: [], errorCount: 0, warnCount: 0,
+          outcome: "error", ms: 0, xsdMs: 0, schMs: 0,
         };
         const ft0 = performance.now();
         try {
@@ -399,19 +415,27 @@ import { createValidator } from "./phive-engine.js";
             rec.xsdMs = b - a; rec.schMs = c - b;
             renderXsd(row, xsd);
             renderSch(row, sch);
-            const layer = (r) => r.error ? "error" : r.skipped ? "skip" : (r.passed ? "pass" : "fail");
-            rec.xsd = layer(xsd); rec.sch = layer(sch);
-            rec.failures = (sch.failures || []).map(f => ({ id: f.id || "—", text: f.text, ruleset: f.ruleset }));
+            rec.xsd = xsd.error ? "error" : xsd.skipped ? "skip" : (xsd.passed ? "pass" : "fail");
+            // Schematron layer has an extra "warn" state: passed (no blocking
+            // errors) but with one or more warning-severity assertions.
+            const schErrs = (sch.errors || []).length, schWarns = (sch.warnings || []).length;
+            rec.sch = sch.error ? "error" : sch.skipped ? "skip"
+              : schErrs ? "fail" : schWarns ? "warn" : "pass";
+            rec.failures = (sch.failures || []).map(f =>
+              ({ id: f.id || "—", text: f.text, ruleset: f.ruleset, severity: f.severity }));
+            rec.errorCount = schErrs; rec.warnCount = schWarns;
             if (xsd.error || sch.error) {
               // A layer that should have run but errored — NOT a pass.
               rec.outcome = "error";
               markRow(row, "error", "Error");
             } else {
               // A clean skip (layer not applicable) doesn't fail the file.
+              // Precedence: XSD/Schematron errors → fail; else warnings → warn;
+              // else clean pass.
               const xsdOk = xsd.passed || xsd.skipped;
-              const schOk = sch.passed || sch.skipped;
-              rec.outcome = xsdOk && schOk ? "pass" : "fail";
-              markRow(row, rec.outcome === "pass" ? "ok" : "fail", rec.outcome === "pass" ? "Pass" : "Fail");
+              if (!xsdOk || schErrs) { rec.outcome = "fail"; markRow(row, "fail", "Fail"); }
+              else if (schWarns)     { rec.outcome = "warn"; markRow(row, "warn", `⚠ ${schWarns} warning${schWarns > 1 ? "s" : ""}`); }
+              else                   { rec.outcome = "pass"; markRow(row, "ok", "Pass"); }
             }
           }
         } catch (err) {
@@ -499,18 +523,22 @@ import { createValidator } from "./phive-engine.js";
   function renderSch(row, res) {
     const div = row.querySelector(".phive-row__sch");
     if (res.skipped) { div.innerHTML = `<p class="phive-skip">Schematron skipped — ${escapeHtml(res.skipped)}.</p>`; return; }
-    if (res.passed)  { div.innerHTML = `<p class="phive-pass">Schematron passed.</p>`; return; }
-    div.innerHTML = `
+    const errors = res.errors || [], warnings = res.warnings || [];
+    if (!errors.length && !warnings.length) { div.innerHTML = `<p class="phive-pass">Schematron passed.</p>`; return; }
+    const item = (f) => `
+      <li>
+        <code>${escapeHtml(f.id || "—")}</code>
+        ${f.ruleset ? `<span class="phive-note">(${escapeHtml(f.ruleset)})</span>` : ""}
+        ${f.location ? ` <span class="phive-note">@ <code>${escapeHtml(f.location)}</code></span>` : ""}
+        <div>${escapeHtml(f.text)}</div>
+      </li>`;
+    const group = (items, klass, headline) => items.length ? `
       <details open>
-        <summary><span class="phive-fail">Schematron failed</span> — ${res.failures.length} rule(s)</summary>
-        <ul>${res.failures.map(f => `
-          <li>
-            <code>${escapeHtml(f.id || "—")}</code>
-            ${f.ruleset ? `<span class="phive-note">(${escapeHtml(f.ruleset)})</span>` : ""}
-            ${f.location ? ` <span class="phive-note">@ <code>${escapeHtml(f.location)}</code></span>` : ""}
-            <div>${escapeHtml(f.text)}</div>
-          </li>`).join("")}</ul>
-      </details>`;
+        <summary><span class="phive-${klass}">${headline}</span> — ${items.length} rule(s)</summary>
+        <ul>${items.map(item).join("")}</ul>
+      </details>` : "";
+    div.innerHTML = group(errors, "fail", "Schematron errors")
+      + group(warnings, "warn", "Schematron warnings");
   }
 
   function escapeHtml(s) {
@@ -539,24 +567,32 @@ import { createValidator } from "./phive-engine.js";
 
   const OUTCOMES = [
     { k: "pass", label: "Passed", cls: "ok" },
+    { k: "warn", label: "Passed with warnings", cls: "warn" },
     { k: "fail", label: "Failed", cls: "fail" },
     { k: "skip", label: "Skipped", cls: "skip" },
     { k: "error", label: "Errors", cls: "error" },
   ];
 
+  // Bucket an outcome into the four bar segments (clean pass / warnings / fail /
+  // other = skip+error).
+  function outcomeSeg(o) {
+    return o === "pass" ? "pass" : o === "warn" ? "warn" : o === "fail" ? "fail" : "other";
+  }
+
   function aggBy(rows, keyFn) {
     const m = new Map();
     for (const r of rows) {
       const k = keyFn(r) || "(none)";
-      const a = m.get(k) || { key: k, total: 0, pass: 0, fail: 0, other: 0 };
+      const a = m.get(k) || { key: k, total: 0, pass: 0, warn: 0, fail: 0, other: 0 };
       a.total++;
-      a[r.outcome === "pass" ? "pass" : r.outcome === "fail" ? "fail" : "other"]++;
+      a[outcomeSeg(r.outcome)]++;
       m.set(k, a);
     }
     return [...m.values()].sort((a, b) => b.total - a.total);
   }
 
-  // Segmented horizontal bar (pass green / fail red / other grey), width by total.
+  // Segmented horizontal bar (pass green / warn amber / fail red / other grey),
+  // width by total.
   function segBars(items, max) {
     max = max || Math.max(1, ...items.map(i => i.total));
     return `<ul class="phive-bars">` + items.map(i => {
@@ -565,9 +601,9 @@ import { createValidator } from "./phive-engine.js";
       return `<li>
         <span class="phive-bars__lbl" title="${escapeHtml(i.key)}">${escapeHtml(i.key)}</span>
         <span class="phive-bars__track">
-          <span class="phive-bars__fill" style="width:${w.toFixed(1)}%">${seg(i.pass, "ok")}${seg(i.fail, "fail")}${seg(i.other, "other")}</span>
+          <span class="phive-bars__fill" style="width:${w.toFixed(1)}%">${seg(i.pass, "ok")}${seg(i.warn || 0, "warn")}${seg(i.fail, "fail")}${seg(i.other, "other")}</span>
         </span>
-        <span class="phive-bars__val">${i.total}${i.fail ? ` <small>${i.fail}✗</small>` : ""}</span>
+        <span class="phive-bars__val">${i.total}${i.fail ? ` <small>${i.fail}✗</small>` : ""}${i.warn ? ` <small class="phive-bars__warn">${i.warn}⚠</small>` : ""}</span>
       </li>`;
     }).join("") + `</ul>`;
   }
@@ -606,7 +642,7 @@ import { createValidator } from "./phive-engine.js";
           <label>Format
             <select id="phive-an-format"><option value="all">All</option>${formats.map(opt).join("")}</select>
           </label>
-          <label>Error rule
+          <label>Rule
             <select id="phive-an-rule"><option value="all">All</option>${rules.map(opt).join("")}</select>
           </label>
           <label>File
@@ -641,15 +677,21 @@ import { createValidator } from "./phive-engine.js";
     const rows = filteredRows();
     const body = anEl.querySelector("#phive-an-body");
     const total = rows.length;
-    const c = { pass: 0, fail: 0, skip: 0, error: 0 };
+    const c = { pass: 0, warn: 0, fail: 0, skip: 0, error: 0 };
     rows.forEach(r => { c[r.outcome] = (c[r.outcome] || 0) + 1; });
-    const passRate = total ? Math.round((c.pass / total) * 100) : 0;
+    // A warning does not reject an e-invoice, so "valid" = clean pass + passed
+    // with warnings. Warnings are still surfaced as their own card / segment.
+    const validRate = total ? Math.round(((c.pass + c.warn) / total) * 100) : 0;
+    const totalWarnings = rows.reduce((a, r) => a + (r.warnCount || 0), 0);
 
-    // Top-10 failed Schematron rules across the filtered set.
+    // Top-10 failing Schematron rules across the filtered set, tracking whether
+    // each rule is an error or a warning.
     const errMap = new Map();
     rows.forEach(r => r.failures.forEach(f => {
-      const e = errMap.get(f.id) || { id: f.id, count: 0, files: new Set(), text: f.text };
-      e.count++; e.files.add(r.name); errMap.set(f.id, e);
+      const e = errMap.get(f.id) || { id: f.id, count: 0, files: new Set(), text: f.text, severity: f.severity };
+      e.count++; e.files.add(r.name);
+      if (f.severity !== "warning") e.severity = f.severity || "fatal";  // an error dominates the label
+      errMap.set(f.id, e);
     }));
     const topErrors = [...errMap.values()]
       .sort((a, b) => b.count - a.count || b.files.size - a.files.size).slice(0, 10);
@@ -663,21 +705,28 @@ import { createValidator } from "./phive-engine.js";
     const section = (title, inner, note) => `<section class="phive-an__sec"><h3>${title}${note ? ` <span class="phive-note">${note}</span>` : ""}</h3>${inner}</section>`;
 
     const outcomeBars = segBars(OUTCOMES.map(o => ({
-      key: o.label, total: c[o.k] || 0, pass: o.k === "pass" ? c.pass : 0,
-      fail: o.k === "fail" ? c.fail : 0, other: (o.k === "skip" || o.k === "error") ? (c[o.k] || 0) : 0,
+      key: o.label, total: c[o.k] || 0,
+      pass: o.k === "pass" ? c.pass : 0,
+      warn: o.k === "warn" ? c.warn : 0,
+      fail: o.k === "fail" ? c.fail : 0,
+      other: (o.k === "skip" || o.k === "error") ? (c[o.k] || 0) : 0,
     })), Math.max(1, ...Object.values(c)));
 
+    const sevPill = (s) => s === "warning"
+      ? `<span class="phive-pill phive-pill--warn">warning</span>`
+      : `<span class="phive-pill phive-pill--fail">error</span>`;
     const topErrTable = topErrors.length ? `
       <table class="phive-an__tbl">
-        <thead><tr><th>#</th><th>Rule</th><th>Occurrences</th><th>Files</th><th>Message</th></tr></thead>
+        <thead><tr><th>#</th><th>Rule</th><th>Severity</th><th>Occurrences</th><th>Files</th><th>Message</th></tr></thead>
         <tbody>${topErrors.map((e, i) => `
           <tr>
             <td>${i + 1}</td>
             <td><button type="button" class="phive-link" data-rule="${escapeHtml(e.id)}"><code>${escapeHtml(e.id)}</code></button></td>
+            <td>${sevPill(e.severity)}</td>
             <td>${e.count}</td><td>${e.files.size}</td>
             <td class="phive-an__msg">${escapeHtml(e.text || "")}</td>
           </tr>`).join("")}</tbody>
-      </table>` : `<p class="phive-note">No Schematron failures in the current selection. 🎉</p>`;
+      </table>` : `<p class="phive-note">No Schematron findings in the current selection. 🎉</p>`;
 
     // Processing time. Batch wall-clock comes from the whole run (_timing);
     // per-file latency stats from the filtered selection.
@@ -710,16 +759,19 @@ import { createValidator } from "./phive-engine.js";
     })();
 
     const fileCap = 500;
+    const outcomeBadgeCls = { pass: "ok", warn: "warn", fail: "fail", skip: "skip", error: "error" };
+    const outcomeBadgeTxt = { pass: "pass", warn: "warnings", fail: "fail", skip: "skip", error: "error" };
     const fileTable = `
       <table class="phive-an__tbl">
-        <thead><tr><th>File</th><th>Format</th><th>XSD</th><th>Schematron</th><th>Outcome</th><th>Errors</th></tr></thead>
+        <thead><tr><th>File</th><th>Format</th><th>XSD</th><th>Schematron</th><th>Outcome</th><th>Errors</th><th>Warnings</th></tr></thead>
         <tbody>${rows.slice(0, fileCap).map(r => `
           <tr>
             <td class="phive-an__file">${escapeHtml(r.name)}</td>
             <td>${r.formatLabel ? `${escapeHtml(r.formatLabel)}${r.deprecated ? ' <span class="phive-tag phive-tag--dep">deprecated</span>' : ""}` : "—"}</td>
             <td>${cell(r.xsd)}</td><td>${cell(r.sch)}</td>
-            <td><span class="phive-badge phive-badge--${r.outcome === "pass" ? "ok" : r.outcome === "fail" ? "fail" : r.outcome === "skip" ? "skip" : "error"}">${r.outcome}</span></td>
-            <td>${r.failures.length || ""}</td>
+            <td><span class="phive-badge phive-badge--${outcomeBadgeCls[r.outcome] || "error"}">${outcomeBadgeTxt[r.outcome] || r.outcome}</span></td>
+            <td>${r.errorCount || ""}</td>
+            <td>${r.warnCount ? `<span class="phive-warn">${r.warnCount}</span>` : ""}</td>
           </tr>`).join("")}</tbody>
       </table>${rows.length > fileCap ? `<p class="phive-note">Showing first ${fileCap} of ${rows.length} files.</p>` : ""}`;
 
@@ -727,9 +779,11 @@ import { createValidator } from "./phive-engine.js";
       <div class="phive-an__cards">
         ${card(total, "Files")}
         ${card(c.pass, "Passed", "ok")}
+        ${card(c.warn, "Passed w/ warnings", "warn")}
         ${card(c.fail, "Failed", "fail")}
         ${card(c.skip + c.error, "Skipped/Error", "skip")}
-        ${card(passRate + "%", "Pass rate")}
+        ${card(validRate + "%", "Pass rate (incl. warn)")}
+        ${card(totalWarnings, "Warnings total", "warn")}
         ${card(deprecatedUsed, "Deprecated format")}
         ${card(bestMatch, "Best-match detect", "warn")}
       </div>
@@ -739,7 +793,7 @@ import { createValidator } from "./phive-engine.js";
       </div>
       ${section("By format", segBars(byFormat), byFormat.length === 12 ? "top 12" : "")}
       ${timeStats}
-      ${section("Top 10 failing rules", topErrTable, "click a rule to filter")}
+      ${section("Top 10 failing rules", topErrTable, "click a rule to filter · error vs warning")}
       ${section(`Files (${rows.length})`, fileTable)}`;
 
     // clicking a rule filters by it
@@ -752,7 +806,7 @@ import { createValidator } from "./phive-engine.js";
       }));
 
     function cell(s) {
-      const map = { pass: "ok", fail: "fail", skip: "skip", na: "skip", error: "fail" };
+      const map = { pass: "ok", warn: "warn", fail: "fail", skip: "skip", na: "skip", error: "fail" };
       const txt = s === "na" ? "—" : s;
       return `<span class="phive-pill phive-pill--${map[s] || "skip"}">${txt}</span>`;
     }
